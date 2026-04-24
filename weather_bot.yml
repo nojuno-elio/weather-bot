@@ -1,0 +1,30 @@
+name: 매일 날씨 알림
+
+on:
+  schedule:
+    # 한국시간 오전 8시 = UTC 오전 23시 (전날)
+    - cron: '0 23 * * *'
+  workflow_dispatch: # 수동 실행 버튼 (테스트용)
+
+jobs:
+  send-weather:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 패키지 설치
+        run: pip install requests
+
+      - name: 날씨 봇 실행
+        env:
+          KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python weather_bot.py

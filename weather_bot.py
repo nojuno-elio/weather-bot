@@ -27,7 +27,7 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # 격자 좌표 (서울 중구 기준 — 아래 주석 참고)
 NX = 60  # 경도 격자
-NY = 127  # 위도 격자
+NY = 122  # 위도 격자
 
 # ──────────────────────────────────────────
 # 기상청 API
@@ -90,33 +90,35 @@ def fetch_forecast(nx: int = NX, ny: int = NY) -> dict:
 
 def parse_today_weather(items: list) -> dict:
     """
-    아이템 목록에서 오늘 날짜의 대표 시간대(0900, 1200) 기준으로
-    TMP(기온), SKY(하늘상태), POP(강수확률), PTY(강수형태)를 추출합니다.
+    TMX(일최고기온), TMN(일최저기온)을 직접 추출하고
+    SKY, POP, PTY는 오전 9시 기준으로 가져옵니다.
     """
     today = datetime.now().strftime("%Y%m%d")
-    target_times = ["0900", "1200", "1500"]  # 우선순위순으로 찾을 시간
+    data = {}
 
-    data = {}  # { category: value }
+    for item in items:
+        if item["fcstDate"] != today:
+            continue
 
-    for target_time in target_times:
-        for item in items:
-            if item["fcstDate"] == today and item["fcstTime"] == target_time:
-                cat = item["category"]
-                if cat not in data:
-                    data[cat] = item["fcstValue"]
+        cat = item["category"]
 
-        # 필요한 카테고리 모두 찾으면 중단
-        if all(k in data for k in ["TMP", "SKY", "POP", "PTY"]):
-            break
+        # 최고/최저 기온은 날짜 안에 딱 한 번만 나옴 — 바로 저장
+        if cat in ("TMX", "TMN"):
+            data[cat] = item["fcstValue"]
+
+        # 하늘/강수/기온은 오전 8시 기준
+        if item["fcstTime"] == "0800" and cat in ("TMP", "SKY", "POP", "PTY"):
+            data[cat] = item["fcstValue"]
 
     return data
 
 
 def format_weather_message(data: dict) -> str:
-    """날씨 데이터를 텔레그램 메시지 문자열로 포맷합니다."""
     now = datetime.now()
     date_str = now.strftime("%Y년 %m월 %d일 (%a)")
 
+    tmx = data.get("TMX", "?")
+    tmn = data.get("TMN", "?")
     tmp = data.get("TMP", "?")
     sky = SKY_CODE.get(data.get("SKY", ""), "알 수 없음")
     pop = data.get("POP", "?")
@@ -125,10 +127,11 @@ def format_weather_message(data: dict) -> str:
     lines = [
         f"🌤 *오늘의 날씨* — {date_str}",
         "",
-        f"🌡 기온: *{tmp}°C*",
-        f"🌥 하늘: {sky}",
-        f"🌂 강수확률: *{pop}%*",
-        f"💧 강수형태: {pty}",
+        f"🌡 오늘 최고기온 : *{tmx}°C*  /  최저기온 : *{tmn}°C*",
+        f"🌡 지금 기온 : *{tmp}°C*",
+        f"🌥 하늘 : {sky}",
+        f"🌂 강수확률 : *{pop}%*",
+        f"💧 강수형태 : {pty}",
     ]
 
     if int(pop) >= 60:
